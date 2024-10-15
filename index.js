@@ -41,8 +41,6 @@ const selectDirectory = async (currentPath) => {
 const cloneSelectedDirectory = async (selectedDir, dest) => {
   const newDest = path.join(dest, path.basename(selectedDir));
   console.log(`Cloning ${selectedDir} to ${newDest}...`);
-
-  // Copy the selected directory to the destination path
   fs.cpSync(selectedDir, newDest, { recursive: true });
 
   console.log(`Successfully cloned ${path.basename(selectedDir)} to ${newDest}`);
