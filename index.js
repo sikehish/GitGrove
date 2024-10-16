@@ -11,7 +11,7 @@ const listDirectories = (dirPath) => {
     .filter(file => fs.statSync(file).isDirectory());
 };
 
-const selectDirectory = async (currentPath) => {
+const selectDirectory = async (repoName, currentPath) => {
   const directories = listDirectories(currentPath);
 
   const choices = directories.map(dir => ({
@@ -19,12 +19,12 @@ const selectDirectory = async (currentPath) => {
     value: dir,
   }));
 
-  if (path.dirname(currentPath) !== currentPath) {
+  if (currentPath!==`${repoName}/temp` &&  path.dirname(currentPath) !== currentPath) {
     choices.unshift({ name: 'Go back', value: '..' });
   }
 
   choices.push({ name: 'Exit', value: null });
-  choices.push({ name: 'Clone', value: 'clone' });
+  choices.push({ name: 'Clone to Repository Directory', value: 'clone' });
 
   const { selectedDir } = await inquirer.prompt([
     {
@@ -34,13 +34,14 @@ const selectDirectory = async (currentPath) => {
       choices: choices,
     },
   ]);
-  console.log
+
   return selectedDir;
 };
 
-const cloneSelectedDirectory = async (selectedDir, dest) => {
-  const newDest = path.join(dest, path.basename(selectedDir));
+const cloneSelectedDirectory = async (selectedDir, repoDir) => {
+  const newDest = path.join(repoDir, path.basename(selectedDir));
   console.log(`Cloning ${selectedDir} to ${newDest}...`);
+
   fs.cpSync(selectedDir, newDest, { recursive: true });
 
   console.log(`Successfully cloned ${path.basename(selectedDir)} to ${newDest}`);
@@ -60,18 +61,22 @@ const main = async () => {
     },
   ]);
 
-  const tempDir = path.join(dest, 'temp_repo');
+  const repoName = path.basename(repoUrl, '.git');
+  const repoDir = path.join(dest, repoName); 
+  const tempDir = path.join(repoDir, 'temp'); 
 
-  if (fs.existsSync(tempDir)) {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  if (fs.existsSync(repoDir)) {
+    console.log(`Removing existing directory: ${repoDir}`);
+    fs.rmSync(repoDir, { recursive: true, force: true });
   }
 
-  console.log(`Cloning the repository into ${tempDir}...`);
+  console.log(`Cloning the repository temporarily into ${tempDir}...`);
   await git.clone(repoUrl, tempDir);
 
   let currentPath = tempDir;
+  let cloneCount=0;
   while (true) {
-    const selectedDir = await selectDirectory(currentPath);
+    const selectedDir = await selectDirectory(repoName, currentPath);
 
     if (selectedDir === null) {
       console.log('Exiting...');
@@ -83,28 +88,30 @@ const main = async () => {
       continue;
     }
 
-    if(selectedDir=='clone'){
-        const { confirmClone } = await inquirer.prompt([
-            {
-              type: 'confirm',
-              name: 'confirmClone',
-              message: `Clone ${path.basename(currentPath)}?`,
-              default: false,
-            },
-          ]);
+    if (selectedDir === 'clone') {
+      const { confirmClone } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirmClone',
+          message: `Clone ${path.basename(currentPath)} to ${repoDir}?`,
+          default: false,
+        },
+      ]);
 
-          console.log(currentPath, dest)
-      
-          if (confirmClone) {
-            await cloneSelectedDirectory(currentPath, dest);
-            break;
-          }
+      if (confirmClone) {
+        await cloneSelectedDirectory(currentPath, repoDir);
+        cloneCount++;
+      }
+    } else {
+      currentPath = selectedDir; 
     }
-
-    currentPath = selectedDir;
   }
+
   fs.rmSync(tempDir, { recursive: true, force: true });
-  console.log('Temporary repository removed. Process complete.');
+  if(cloneCount===0) {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    console.log("You did not clone any files/folders.")
+  }else console.log(`You cloned ${cloneCount} files/folders.`)
 };
 
 main().catch(console.error);
