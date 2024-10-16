@@ -1,3 +1,6 @@
+#!/usr/bin/env node
+
+
 const inquirer = require('inquirer').default;
 const fs = require('fs');
 const path = require('path');
