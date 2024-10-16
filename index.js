@@ -3,50 +3,58 @@ const fs = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
 
+
 const git = simpleGit();
 
-const listDirectories = (dirPath) => {
+const listItems = (dirPath) => {
   return fs.readdirSync(dirPath)
     .map(file => path.join(dirPath, file))
-    .filter(file => fs.statSync(file).isDirectory());
+    .filter(file => fs.statSync(file).isDirectory() || fs.statSync(file).isFile());
 };
 
-const selectDirectory = async (repoName, currentPath) => {
-  const directories = listDirectories(currentPath);
+const selectItem = async (repoName, currentPath) => {
+  const items = listItems(currentPath);
 
-  const choices = directories.map(dir => ({
-    name: path.basename(dir),
-    value: dir,
-  }));
-
-  if (currentPath!==`${repoName}/temp` &&  path.dirname(currentPath) !== currentPath) {
-    choices.unshift({ name: 'Go back', value: '..' });
+  const choices=[]
+  if (currentPath !== `${repoName}/temp` && path.dirname(currentPath) !== currentPath) {
+    choices.push({ name: 'Go back', value: '..' });
   }
-
   choices.push({ name: 'Exit', value: null });
   choices.push({ name: 'Clone to Repository Directory', value: 'clone' });
 
-  const { selectedDir } = await inquirer.prompt([
+  choices.push(...(items.map(item => ({
+    name: path.basename(item),
+    value: item,
+  }))))
+
+
+
+  const { selectedItem } = await inquirer.prompt([
     {
       type: 'list',
-      name: 'selectedDir',
-      message: `Select a directory (Current: ${currentPath}):`,
+      name: 'selectedItem',
+      message: `Select a file or directory (Current: ${currentPath}):`,
       choices: choices,
     },
   ]);
 
-  return selectedDir;
+  return selectedItem;
 };
 
-const cloneSelectedDirectory = async (selectedDir, repoDir) => {
-  const newDest = path.join(repoDir, path.basename(selectedDir));
-  console.log(`Cloning ${selectedDir} to ${newDest}...`);
+const cloneSelectedItem = async (selectedItem, repoDir) => {
+  const newDest = path.join(repoDir, path.basename(selectedItem));
+  console.log(`Cloning ${selectedItem} to ${newDest}...`);
 
-  fs.cpSync(selectedDir, newDest, { recursive: true });
+  if (fs.statSync(selectedItem).isDirectory()) {
+    fs.cpSync(selectedItem, newDest, { recursive: true });
+  } else {
+    fs.copyFileSync(selectedItem, newDest);
+  }
 
-  console.log(`Successfully cloned ${path.basename(selectedDir)} to ${newDest}`);
+  console.log(`Successfully cloned ${path.basename(selectedItem)} to ${newDest}`);
 };
 
+//main fn from where execution starts
 const main = async () => {
   const { repoUrl, dest } = await inquirer.prompt([
     {
@@ -62,8 +70,8 @@ const main = async () => {
   ]);
 
   const repoName = path.basename(repoUrl, '.git');
-  const repoDir = path.join(dest, repoName); 
-  const tempDir = path.join(repoDir, 'temp'); 
+  const repoDir = path.join(dest, repoName);
+  const tempDir = path.join(repoDir, 'temp');
 
   if (fs.existsSync(repoDir)) {
     console.log(`Removing existing directory: ${repoDir}`);
@@ -74,44 +82,62 @@ const main = async () => {
   await git.clone(repoUrl, tempDir);
 
   let currentPath = tempDir;
-  let cloneCount=0;
+  let fileCloneCount=0, folderCloneCount=0
   while (true) {
-    const selectedDir = await selectDirectory(repoName, currentPath);
+    const selectedItem = await selectItem(repoName, currentPath);
 
-    if (selectedDir === null) {
+    if (selectedItem === null) {
       console.log('Exiting...');
       break;
     }
 
-    if (selectedDir === '..') {
+    if (selectedItem === '..') {
       currentPath = path.dirname(currentPath);
       continue;
     }
 
-    if (selectedDir === 'clone') {
+    if (selectedItem === 'clone') {
       const { confirmClone } = await inquirer.prompt([
         {
           type: 'confirm',
           name: 'confirmClone',
           message: `Clone ${path.basename(currentPath)} to ${repoDir}?`,
-          default: false,
+          default: true,
         },
       ]);
 
       if (confirmClone) {
-        await cloneSelectedDirectory(currentPath, repoDir);
-        cloneCount++;
+        await cloneSelectedItem(currentPath, repoDir);
+        folderCloneCount++;
       }
     } else {
-      currentPath = selectedDir; 
+      if (fs.statSync(selectedItem).isDirectory()) {
+        currentPath = selectedItem;
+      } else {
+        const { confirmCloneFile } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirmCloneFile',
+            message: `Clone file ${path.basename(selectedItem)} to ${repoDir}?`,
+            default: false,
+          },
+        ]);
+
+        if (confirmCloneFile) {
+          await cloneSelectedItem(selectedItem, repoDir);
+          fileCloneCount++;
+        }
+      }
     }
   }
 
   fs.rmSync(tempDir, { recursive: true, force: true });
-  if(cloneCount===0) {
+  if (folderCloneCount === 0 && fileCloneCount===0) {
     fs.rmSync(repoDir, { recursive: true, force: true });
-    console.log("You did not clone any files/folders.")
-  }else console.log(`You cloned ${cloneCount} files/folders.`)
+    console.log("You did not clone any files/folders.");
+  } else {
+    console.log(`You cloned ${folderCloneCount} directories and ${fileCloneCount} files.`)
+  }
 };
 
 main().catch(console.error);
