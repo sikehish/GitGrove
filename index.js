@@ -69,6 +69,7 @@ const main = async () => {
     },
   ]);
 
+
   const repoName = path.basename(repoUrl, '.git');
   const repoDir = path.join(dest, repoName);
   const tempDir = path.join(repoDir, 'temp');
@@ -79,7 +80,19 @@ const main = async () => {
   }
 
   console.log(`Cloning the repository temporarily into ${tempDir}...`);
-  await git.clone(repoUrl, tempDir);
+
+  try{
+    await git.clone(repoUrl, tempDir);
+  }catch(err){
+    
+    if (fs.existsSync(repoDir)) {
+      console.log(`Removing existing directory: ${repoDir}`);
+      fs.rmSync(repoDir, { recursive: true, force: true });
+    }
+    console.log(err.message)
+    console.log('Exiting...')
+    return
+  }
 
   let currentPath = tempDir;
   let fileCloneCount=0, folderCloneCount=0
