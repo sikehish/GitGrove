@@ -11,14 +11,14 @@ const git = simpleGit();
 const listItems = (dirPath) => {
   return fs.readdirSync(dirPath)
     .map(file => path.join(dirPath, file))
-    .filter(file => fs.statSync(file).isDirectory() || fs.statSync(file).isFile());
 };
 
 const selectItem = async (repoName, currentPath) => {
   const items = listItems(currentPath);
 
   const choices = [];
-  if (currentPath !== `${repoName}/temp` && path.dirname(currentPath) !== currentPath) {
+  console.log(path.dirname(currentPath),currentPath)
+  if (currentPath !== `${repoName}/temp`) {
     choices.push({ name: 'Go back', value: '..' });
   }
   choices.push({ name: 'Exit', value: null });
@@ -91,11 +91,6 @@ const main = async () => {
   const repoDir = path.join(dest, repoName);
   const tempDir = path.join(repoDir, 'temp');
 
-  if (fs.existsSync(repoDir)) {
-    console.log(`Removing existing directory: ${repoDir}`);
-    fs.rmSync(repoDir, { recursive: true, force: true });
-  }
-
   console.log(`Cloning the repository temporarily into ${tempDir}...`);
 
   try {
@@ -128,7 +123,7 @@ const main = async () => {
         {
           type: 'confirm',
           name: 'confirmClone',
-          message: `Clone ${path.basename(currentPath)} to ${repoDir}?`,
+          message: `Clone to ${repoDir}?`,
           default: true,
         },
       ]);
